@@ -1,0 +1,2 @@
+ * [http://www.perl.org/ PERL]
+ * [http://www.imagemagick.org/script/perl-magick.php PerlMagick]
