@@ -1,19 +1,19 @@
 == -h --help ==
 
-* Not implemented
+ * Not implemented
 
 Print a help message and exits.
 
 == --version ==
 
-* Not implemented
+ * Not implemented
 
 Print a breif message and exits.
 
 == item -s --sort ==
 
-* Not implemented
-* Proposed (may not be implemented)
+ * Not implemented
+ * Proposed (may not be implemented)
 
 Specifies how to sort the images.  This may be specified multiple times for
 sub-sorting.
@@ -25,18 +25,18 @@ sub-sorting.
 }}}
 == -q --quiet ==
 
-* Not implemented
+ * Not implemented
 
 Show less output.
 
 == -v --verbose ==
 
-* Not implemented
+ * Not implemented
 
 Show more output.
 
 == -r -R --recursive ==
 
-* Not implemented
+ * Not implemented
 
 Operate recursively (down directory tree).
