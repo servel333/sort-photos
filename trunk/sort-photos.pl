@@ -18,11 +18,14 @@ use strict;
 use File::Path;
 use File::Spec;
 use Getopt::Long;
-use Image::Magick;
+#use Image::Magick;
 use Pod::Usage;
 use POSIX ();
 use Time::localtime;
 use Term::ReadKey;
+
+#use lib '.';
+#use Image::EXIF ();
 
 
 my ($VOLUME, $DIRECTORIES, $SCRIPT) = File::Spec->splitpath($0);
@@ -105,7 +108,7 @@ project as well as binary files used to write various different tables.
 
 =cut
 
-
+ParseOptions();
 ProcessFolder($source);
 
 
@@ -226,25 +229,6 @@ sub ParseOptions
     #print("\n") if ($Std);
 }
 
-sub process_picture {
-	# $File::Find::dir	is the current directory name
-	# $_				is the current filename within that directory
-	# #File::Fine::name is the complete pathname to the file
-
-	print "processing " . $_;
-	
-	#!/usr/local/bin/perl
-	use Image::Magick;
-
-	my $image = Image::Magick->new;
-	my $x = $image->Read($_);
-	warn "$x" if "$x";
-
-	
-	print "\n";
-
-}
-
 
 sub ProcessFolder
 {
@@ -259,7 +243,7 @@ sub ProcessFolder
     }
 
     ClearConsoleLine() if ($verbosity);
-    print("$path : $count") if ($verbosity);
+    print("$path : $count files") if ($verbosity);
     print("\n") if (1 < $verbosity);
 
     my $image_magick = Image::Magick->new;
@@ -280,31 +264,31 @@ sub ProcessFolder
             next;
         }
 
-        my $image_count_or_error = $image_magick->Read($base_filename);
-        my $image_count;
-        if ("$image_count_or_error")
-        {
-            $image_count = 0;
-            print STDERR "WARNING: Failed to parse a directory: $path, $image_count_or_error\n" if ($WARNINGS);
-            next;
-        }
-        else
-        {
-            $image_count = 0+$image_count_or_error;
-            #print STDERR "NOTICE: $image_count $path image(s) found.\n" if ($DEBUG);
-        }
+        #my $image_count_or_error = $image_magick->Read($base_filename);
+        #my $image_count;
+        #if ("$image_count_or_error")
+        #{
+        #    $image_count = 0;
+        #    print STDERR "NOTICE: Not an image: $path, $image_count_or_error\n" if ($DEBUG);
+        #    next;
+        #}
+        #else
+        #{
+        #    $image_count = 0+$image_count_or_error;
+        #    #print STDERR "NOTICE: $image_count $path image(s) found.\n" if ($DEBUG);
+        #}
 
         #my $base_filename = $image_magick->[$x]->Get('base-filename');
-        my $width  = $image_magick->Get('width');
-        my $height = $image_magick->Get('height');
-        my $usertime = $image_magick->Get('user-time');
+        #my $width  = $image_magick->Get('width');
+        #my $height = $image_magick->Get('height');
+        #my $usertime = $image_magick->Get('user-time');
 
         $base_filename = File::Spec->rel2abs($base_filename);
         my ($file_volume, $file_directories, $file_name) = File::Spec->splitpath($base_filename);
 
-        ClearConsoleLine() if ($verbosity);
-        print("$file_name $width by $height, $usertime") if ($verbosity);
-        print("\n") if (1 < $verbosity);
+        #ClearConsoleLine() if ($verbosity);
+        #print("$file_name $width by $height, $usertime") if ($verbosity);
+        #print("\n") if (1 < $verbosity);
 
     }
 
