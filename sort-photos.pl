@@ -4,6 +4,8 @@
 
 sort-photos - Sort photos from one directory into another.
 
+Version 0.5
+
 =head1 SYNOPSIS
 
 Sorts all the photos from one directory into another directory based on the
@@ -59,6 +61,10 @@ Print a help message and exits.
 
 Print a breif message and exits.
 
+=item -f --fake
+
+Do everything except actually move or copy files.
+
 =cut
 
 #=item -s --sort
@@ -99,6 +105,8 @@ my $verbosity = 2;
 
 my $recursive = 0;
 
+my $fake_mode = 0;
+
 =head1 DESCRIPTION
 
 Generates files needed to compile the dictionary and images into the Duet
@@ -106,125 +114,49 @@ project as well as binary files used to write various different tables.
 
 =cut
 
+
 ParseOptions();
 ProcessFolder($source);
 
 
 sub ParseOptions
 {
-    #my ($option_log_file, $option_show_help, $option_image_compression, $option_all, $option_variant) = undef;
-    #my ($option_std_verboseness, $option_log_verboseness, $option_fake) = 0;
-    #
-    #GetOptions
-    #(
-    #    'help|h'        => \$option_show_help,
-    #    'verbose|v+'    => \$option_std_verboseness,
-    #    'log|l+'        => \$option_log_verboseness,
-    #    'logfile:s'     => \$option_log_file,
-    #    'fake|f'        => \$option_fake,
-    #    'all|a'         => \$option_all,
-    #    'compression:s' => \$option_image_compression,
-    #    'variant:s'     => \$option_variant,
-    #);
-    #
-    #if ($option_show_help)
-    #{
-    #    pod2usage
-    #    (
-    #      -exitval => 0,
-    #      -verbose => 99,
-    #      -sections => "NAME|SYNOPSIS|USAGE|USAGE/OPTIONS"
-    #    ); # this will exit the script here.
-    #
-    #    exit 0; # should not be reached.
-    #}
-    #
-    #if (defined($option_std_verboseness))
-    #{
-    #    $Std = $option_std_verboseness;
-    #    if ($Std)
-    #    {
-    #        print("Standard verboseness set to " . $Std);
-    #        print(" (" . $Std_Verboseness{$Std} . ")")
-    #            if (exists $Std_Verboseness{$Std});
-    #        print(".\n");
-    #    }
-    #}
-    #
-    #if (defined($option_log_verboseness))
-    #{
-    #    $Log = $option_log_verboseness;
-    #    if ($Std)
-    #    {
-    #        print("Logging verboseness set to " . $Log);
-    #        print(" (" . $Log_Verboseness{$Log} . ")")
-    #            if (exists $Log_Verboseness{$Log});
-    #        print(".\n");
-    #    }
-    #
-    #}
-    #
-    #if ($option_log_file)
-    #{
-    #    $Files{log} = File::Spec->rel2abs($option_log_file);
-    #    Logging::LogFile($Files{log});
-    #    if (!$Log)
-    #    {
-    #        $Log = 1;
-    #    }
-    #}
-    #else
-    #{
-    #    $Files{log} = $Default_Log_File;
-    #}
-    #
-    #if ($Log)
-    #{
-    #    print("logging set to '" . Logging::LogFile() . "'.\n")
-    #        if (1 <= $Std);
-    #    Logging::RawWriteLine();
-    #    Logging::WriteLine("----- Logging started -----");
-    #}
-    #else
-    #{
-    #    print("Logging disabled.\n")
-    #      if ($Std);
-    #}
-    #
-    #if ($option_image_compression)
-    #{
-    #    foreach my $type (keys(%Image_Compression_Types))
-    #    {
-    #        if (lc($type) eq lc($option_image_compression))
-    #        {
-    #            # $Image_Compression_Types{}
-    #            # $Image_Compression_Names{}
-    #            $Image_Compression = $Image_Compression_Types{$type};
-    #            print("Image compression set to " . $Image_Compression_Names{$Image_Compression_Types{$type}} . "\n") if ($Std);
-    #        }
-    #    }
-    #}
-    #
-    #if (defined($option_fake))
-    #{
-    #    $RealMode = !$option_fake;
-    #    print("'Fake' file writing mode enabled.\n")
-    #      if ($Std);
-    #}
-    #
-    #if (defined($option_all))
-    #{
-    #    $AllMode = $option_all;
-    #    print("'All' mode enabled.  Will generate all variants of the static talbe data file.\n")
-    #      if ($Std);
-    #}
-    #
-    #if (defined($option_variant))
-    #{
-    #    $Variant = $option_variant;
-    #}
-    #
-    #print("\n") if ($Std);
+    my ($option_show_help, $option_verbosity, $option_fake, $option_recursive) = 0;
+
+    GetOptions
+    (
+        'help|version|h' => \$option_show_help,
+        'verbose|v+'     => \$option_verbosity,
+        'fake|f'         => \$option_fake,
+        'recursive|R|r'  => \$option_recursive,
+    );
+
+    if ($option_show_help)
+    {
+        pod2usage
+        (
+          -exitval => 0,
+          -verbose => 99,
+          -sections => "NAME|SYNOPSIS|USAGE|USAGE/OPTIONS"
+        ); # this will exit the script here.
+    
+        exit 0; # should not be reached.
+    }
+
+    if ($option_verbosity)
+    {
+        $verbosity = $option_verbosity;
+    }
+
+    if ($option_fake)
+    {
+        $fake_mode = $option_fake;
+    }
+
+    if ($option_recursive)
+    {
+        $recursive = $option_recursive;
+    }
 }
 
 
@@ -365,7 +297,6 @@ sub ListFiles
 
     return @list;
 }
-
 
 
 =head2 ClearConsoleLine ( $char )
