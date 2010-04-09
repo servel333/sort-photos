@@ -18,14 +18,12 @@ use strict;
 use File::Path;
 use File::Spec;
 use Getopt::Long;
-#use Image::Magick;
 use Pod::Usage;
 use POSIX ();
 use Time::localtime;
 use Term::ReadKey;
-
-#use lib '.';
-#use Image::EXIF ();
+use File::Copy;
+use Image::ExifTool ':Public';
 
 
 my ($VOLUME, $DIRECTORIES, $SCRIPT) = File::Spec->splitpath($0);
@@ -246,49 +244,78 @@ sub ProcessFolder
     print("$path : $count files") if ($verbosity);
     print("\n") if (1 < $verbosity);
 
-    my $image_magick = Image::Magick->new;
-
-    #for (my $x = 0; $image_magick->[$x]; $x++)
     foreach my $file (@files)
     {
         my $base_filename = $path . '/' . $file;
+        my $full_path = File::Spec->rel2abs($base_filename);
+        my ($file_volume, $file_directories, $file_name) = File::Spec->splitpath($full_path);
 
         ClearConsoleLine() if ($verbosity);
         print("$file") if ($verbosity);
 
-        if (-d $base_filename)
+        if (-d $full_path)
         {
             # Is a directory, process it now.
             # exit function here.
-            #ProcessFolder($base_filename) if $recursive;
+            #ProcessFolder($full_path) if $recursive;
             next;
         }
 
-        #my $image_count_or_error = $image_magick->Read($base_filename);
-        #my $image_count;
-        #if ("$image_count_or_error")
-        #{
-        #    $image_count = 0;
-        #    print STDERR "NOTICE: Not an image: $path, $image_count_or_error\n" if ($DEBUG);
-        #    next;
-        #}
-        #else
-        #{
-        #    $image_count = 0+$image_count_or_error;
-        #    #print STDERR "NOTICE: $image_count $path image(s) found.\n" if ($DEBUG);
-        #}
+        my $info = ImageInfo($full_path);
+        my $date = $info->{'CreateDate'};
 
-        #my $base_filename = $image_magick->[$x]->Get('base-filename');
-        #my $width  = $image_magick->Get('width');
-        #my $height = $image_magick->Get('height');
-        #my $usertime = $image_magick->Get('user-time');
+        if ($date)
+        {
+            $date =~ /
+                (?<year>[0-9][0-9][0-9][0-9])
+                [-: ]
+                (?<month>[0-9][0-9])
+                [-: ]
+                (?<day>[0-9][0-9])
+                [-: ]
+                (?<hour>[0-9][0-9])
+                [-: ]
+                (?<minute>[0-9][0-9])
+                [-: ]
+                (?<second>[0-9][0-9])
+                /x;
 
-        $base_filename = File::Spec->rel2abs($base_filename);
-        my ($file_volume, $file_directories, $file_name) = File::Spec->splitpath($base_filename);
+            my $target = $dest . '/' . $+{year} . '/' . $+{month} . '/' . $+{day} . '/' . $file_name;
+            my $full_target = File::Spec->rel2abs($target);
+            my $target_path = $dest . '/' . $+{year} . '/' . $+{month} . '/' . $+{day} . '/';
+            my $full_target_path = File::Spec->rel2abs($target_path);
+            mkpath($full_target_path);
 
-        #ClearConsoleLine() if ($verbosity);
-        #print("$file_name $width by $height, $usertime") if ($verbosity);
-        #print("\n") if (1 < $verbosity);
+            if (-e $full_target)
+            {
+                ClearConsoleLine() if ($verbosity);
+                print("$base_filename : Exists") if ($verbosity);
+                print("\n") if (1 < $verbosity);
+            }
+            else
+            {
+                ClearConsoleLine() if ($verbosity);
+                print("$base_filename ") if ($verbosity);
+
+                if ( copy($full_path, $full_target) )
+                {
+                    print("--> $target") if ($verbosity);
+                }
+                else
+                {
+                    print ": copy failed: $!" if ($verbosity);
+                }
+
+                print("\n") if (1 < $verbosity);
+
+            }
+        }
+        else
+        {
+            ClearConsoleLine() if ($verbosity);
+            print("$base_filename : unsupported file type or missing expected EXIF tags.") if ($verbosity);
+            print("\n") if (1 < $verbosity);
+        }
 
     }
 
