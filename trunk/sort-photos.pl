@@ -4,7 +4,7 @@
 
 sort-photos - Sort photos from one directory into another.
 
-Version 0.5
+Version 0.5.1
 
 =head1 SYNOPSIS
 
@@ -43,9 +43,7 @@ my $dest   = "./sorted"; # destination folder
 
 =head1 USAGE
 
-  sort-images.pl -h
-
-  sort-images.pl -v
+  sort-images.pl --help
 
   sort-images.pl <options> -r <directory> <directory> ... <target-directory>
 
@@ -53,7 +51,7 @@ my $dest   = "./sorted"; # destination folder
 
 =over 8
 
-=item -h --help
+=item --help -h
 
 Print a help message and exits.
 
@@ -61,9 +59,23 @@ Print a help message and exits.
 
 Print a breif message and exits.
 
-=item -f --fake
+=item --verbose -v
+
+Show more output.
+
+=item --recursive -r -R
+
+Operate recursively (down directory tree).
+
+=item --fake
 
 Do everything except actually move or copy files.
+
+=item --
+
+Stops processing command line options.  Further items are assumed to be
+files or directories.  The final argument is assumed to be the target
+directory.
 
 =cut
 
@@ -77,18 +89,6 @@ Do everything except actually move or copy files.
 #  --sort image <image-property>
 #  --sort file <file-property>
 
-=item -q --quiet
-
-Show less output.
-
-=item -v --verbose
-
-Show more output.
-
-=item -r -R --recursive
-
-Operate recursively (down directory tree).
-
 =back
 
 =cut
@@ -101,11 +101,15 @@ my $WARNINGS = 2;
 #  0  Minimal
 #  1  Normal
 #  2  Verbose
-my $verbosity = 2;
+my $verbosity = 1;
 
 my $recursive = 0;
 
 my $fake_mode = 0;
+
+my $operation = 'copy';
+my $operation_pasttense = 'copied';
+
 
 =head1 DESCRIPTION
 
@@ -115,8 +119,10 @@ project as well as binary files used to write various different tables.
 =cut
 
 
+$|++ if ($verbosity); # causes print to output immediately.
 ParseOptions();
 ProcessFolder($source);
+ClearConsoleLine() if (1 == $verbosity);
 
 
 sub ParseOptions
@@ -127,7 +133,7 @@ sub ParseOptions
     (
         'help|version|h' => \$option_show_help,
         'verbose|v+'     => \$option_verbosity,
-        'fake|f'         => \$option_fake,
+        'fake'           => \$option_fake,
         'recursive|R|r'  => \$option_recursive,
     );
 
@@ -164,6 +170,8 @@ sub ProcessFolder
 {
     my $path = shift;
 
+    my ($successful_count, $failed_count) = 0;
+
     my @files = ListFiles($path);
     my $count = @files;
 
@@ -173,8 +181,7 @@ sub ProcessFolder
     }
 
     ClearConsoleLine() if ($verbosity);
-    print("$path : $count files") if ($verbosity);
-    print("\n") if (1 < $verbosity);
+    print("$path : $count files\n") if (1 < $verbosity);
 
     foreach my $file (@files)
     {
@@ -187,9 +194,7 @@ sub ProcessFolder
 
         if (-d $full_path)
         {
-            # Is a directory, process it now.
-            # exit function here.
-            #ProcessFolder($full_path) if $recursive;
+            ProcessFolder($full_path) if $recursive;
             next;
         }
 
@@ -216,26 +221,33 @@ sub ProcessFolder
             my $full_target = File::Spec->rel2abs($target);
             my $target_path = $dest . '/' . $+{year} . '/' . $+{month} . '/' . $+{day} . '/';
             my $full_target_path = File::Spec->rel2abs($target_path);
-            mkpath($full_target_path);
+            mkpath($full_target_path) if !$fake_mode;
 
             if (-e $full_target)
             {
                 ClearConsoleLine() if ($verbosity);
-                print("$base_filename : Exists") if ($verbosity);
+                print("'$target' exists.") if ($verbosity);
                 print("\n") if (1 < $verbosity);
+                $failed_count += 1;
             }
             else
             {
                 ClearConsoleLine() if ($verbosity);
-                print("$base_filename ") if ($verbosity);
 
-                if ( copy($full_path, $full_target) )
+                if ($fake_mode)
                 {
-                    print("--> $target") if ($verbosity);
+                    print("'$target' $operation_pasttense [fake mode].") if ($verbosity);
+                    $successful_count += 1;
+                }
+                elsif ( copy($full_path, $full_target) )
+                {
+                    print("'$target' $operation_pasttense.") if ($verbosity);
+                    $successful_count += 1;
                 }
                 else
                 {
-                    print ": copy failed: $!" if ($verbosity);
+                    print "'$target' $operation failed: $!" if ($verbosity);
+                    $failed_count += 1;
                 }
 
                 print("\n") if (1 < $verbosity);
@@ -245,16 +257,18 @@ sub ProcessFolder
         else
         {
             ClearConsoleLine() if ($verbosity);
-            print("$base_filename : unsupported file type or missing expected EXIF tags.") if ($verbosity);
+            print("$base_filename could not process file.") if ($verbosity);
             print("\n") if (1 < $verbosity);
+            $failed_count += 1;
         }
 
     }
 
-    # ($a, $b, $c) = $image->Get('colorspace', 'magick', 'adjoin');
-    # $width = $image->[3]->Get('columns');
-    # user-time
-
+    if ($verbosity)
+    {
+        ClearConsoleLine();
+        print("$path : $successful_count $operation_pasttense, $failed_count failed\n");
+    }
 }
 
 
