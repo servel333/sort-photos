@@ -5,7 +5,7 @@
 
 sort-photos - Sort photos from one directory into another.
 
-Version 0.5.1
+Version 1.0.0
 
 =head1 SYNOPSIS
 
