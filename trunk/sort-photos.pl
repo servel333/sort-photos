@@ -34,9 +34,9 @@ my ($VOLUME, $DIRECTORIES, $SCRIPT) = File::Spec->splitpath($0);
 
 =head1 USAGE
 
-  sort-images.pl --help
+Arguments starting with - are assumed to be single letter arguments.  Specifying "-abc" is equivalent to "-a -b -c"
 
-  sort-images.pl <options> -r <directory> <directory> ... <target-directory>
+  sort-images.pl [-R] <source> [<source> [...]] <target>
 
 =head2 OPTIONS
 
@@ -48,7 +48,7 @@ Print a help message and exits.
 
 =item --version
 
-Print a breif message and exits.
+Print a brief message and exits.
 
 =item --verbose -v
 
@@ -115,22 +115,6 @@ project as well as binary files used to write various different tables.
 
 $|++ if ($verbosity); # causes print to output immediately.
 ParseOptions();
-
-my $not_exist = 0;
-foreach my $source (@source_paths, $target_path)
-{
-    if (!(-e $source))
-    {
-        print STDERR "$source does not exist or is unknown.\n";
-        $not_exist++;
-    }
-}
-
-if ($not_exist)
-{
-    die;
-}
-
 foreach my $source (@source_paths)
 {
     ProcessFolder($source);
@@ -149,9 +133,9 @@ sub ParseOptions
         {
             last;
         }
-        elsif ($arg_lc =~ s/^-([^- ][^ ]+)$/$1/)
+        elsif ($arg_lc =~ s/^-([^- ][^ ]*)$/$1/)
         {
-            my @chars = split($arg_lc);
+            my @chars = split(//, $arg_lc);
 
             while(my $char = shift(@chars))
             {
@@ -174,15 +158,14 @@ sub ParseOptions
                 }
                 else
                 {
-                    print STDERR "Invalid option $arg\n";
-                    die;
+                    print STDERR "Invalid option -$char\n";
+                    exit;
                 }
             }
 
         }
         elsif ($arg_lc =~ s/^--([^- ][^ ]+)$/$1/)
         {
-
             if ($arg_lc eq 'help')
             {
                 ShowUsage();
@@ -208,7 +191,7 @@ sub ParseOptions
             else
             {
                 print STDERR "Invalid option $arg\n";
-                die;
+                exit;
             }
 
         }
@@ -224,7 +207,34 @@ sub ParseOptions
         push(@source_paths, shift(@ARGV))
     }
 
+    if (!@source_paths)
+    {
+        print STDERR "no source or target path specified\n";
+        exit;
+    }
+
     $target_path = pop(@source_paths);
+
+    if (!@source_paths)
+    {
+        print STDERR "no source path(s) specified\n";
+        exit;
+    }
+
+    my $not_exist = 0;
+    foreach my $source (@source_paths)
+    {
+        if (!(-e $source))
+        {
+            print STDERR "$source does not exist or is unknown.\n";
+            $not_exist++;
+        }
+    }
+
+    if ($not_exist)
+    {
+        exit;
+    }
 }
 
 
@@ -389,10 +399,10 @@ sub ListFiles
 =head2 ClearConsoleLine ( $char )
 
 Prints spaces for the width of the current console line except for the very
-last character (in windows pringing the entire width of the line will
+last character (in windows printing the entire width of the line will
 automatically move the carrot one line down)
 
-Uses carrage return ("\r") in order to return to the start of the line.
+Uses carriage return ("\r") in order to return to the start of the line.
 
 =over
 
