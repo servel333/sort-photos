@@ -1,2 +1,2 @@
  * [http://www.perl.org/ PERL]
- * Image::ExifTool PERL module
+ * {{{Image::ExifTool}}} PERL module
