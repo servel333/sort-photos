@@ -1,5 +1,6 @@
 #!/usr/bin/perl
 
+
 =head1 NAME
 
 sort-photos - Sort photos from one directory into another.
@@ -30,16 +31,6 @@ use Image::ExifTool ':Public';
 
 my ($VOLUME, $DIRECTORIES, $SCRIPT) = File::Spec->splitpath($0);
 
-my $source = "./tosort"; # source folder
-my $dest   = "./sorted"; # destination folder
-
-# get directory listing of source
-
-# iterate over each file
-    # is picture
-	# get year, month and day photo was taken
-	# create directory as $dest/$year/$month/$day
-	# drop file in folder just created
 
 =head1 USAGE
 
@@ -110,6 +101,9 @@ my $fake_mode = 0;
 my $operation = 'copy';
 my $operation_pasttense = 'copied';
 
+my @source_paths;
+my $target_path;
+
 
 =head1 DESCRIPTION
 
@@ -121,48 +115,127 @@ project as well as binary files used to write various different tables.
 
 $|++ if ($verbosity); # causes print to output immediately.
 ParseOptions();
-ProcessFolder($source);
+
+my $not_exist = 0;
+foreach my $source (@source_paths, $target_path)
+{
+    if (!(-e $source))
+    {
+        print STDERR "$source does not exist or is unknown.\n";
+        $not_exist++;
+    }
+}
+
+if ($not_exist)
+{
+    die;
+}
+
+foreach my $source (@source_paths)
+{
+    ProcessFolder($source);
+}
 ClearConsoleLine() if (1 == $verbosity);
 
 
 sub ParseOptions
 {
-    my ($option_show_help, $option_verbosity, $option_fake, $option_recursive) = 0;
+    while (@ARGV)
+    {
+        my $arg = shift(@ARGV);
+        my $arg_lc = lc($arg);
 
-    GetOptions
+        if ($arg_lc eq '--')
+        {
+            last;
+        }
+        elsif ($arg_lc =~ s/^-([^- ][^ ]+)$/$1/)
+        {
+            my @chars = split($arg_lc);
+
+            while(my $char = shift(@chars))
+            {
+                if ($char eq 'h')
+                {
+                    ShowUsage();
+                    exit;
+                }
+                elsif ($char eq 'v') # verbose
+                {
+                    $verbosity++;
+                }
+                elsif ($char eq 'r') # recursive
+                {
+                    $recursive++;
+                }
+                elsif ($char eq 'R') # recursive
+                {
+                    $recursive++;
+                }
+                else
+                {
+                    print STDERR "Invalid option $arg\n";
+                    die;
+                }
+            }
+
+        }
+        elsif ($arg_lc =~ s/^--([^- ][^ ]+)$/$1/)
+        {
+
+            if ($arg_lc eq 'help')
+            {
+                ShowUsage();
+                exit;
+            }
+            elsif ($arg_lc eq 'version')
+            {
+                ShowUsage();
+                exit;
+            }
+            elsif ($arg_lc eq 'verbose')
+            {
+                $verbosity++;
+            }
+            elsif ($arg_lc eq 'recursive')
+            {
+                $recursive++;
+            }
+            elsif ($arg_lc eq 'fake')
+            {
+                $fake_mode++;
+            }
+            else
+            {
+                print STDERR "Invalid option $arg\n";
+                die;
+            }
+
+        }
+        else
+        {
+            push(@source_paths, $arg)
+        }
+
+    }
+
+    while (@ARGV)
+    {
+        push(@source_paths, shift(@ARGV))
+    }
+
+    $target_path = pop(@source_paths);
+}
+
+
+sub ShowUsage
+{
+    pod2usage
     (
-        'help|version|h' => \$option_show_help,
-        'verbose|v+'     => \$option_verbosity,
-        'fake'           => \$option_fake,
-        'recursive|R|r'  => \$option_recursive,
-    );
-
-    if ($option_show_help)
-    {
-        pod2usage
-        (
-          -exitval => 0,
-          -verbose => 99,
-          -sections => "NAME|SYNOPSIS|USAGE|USAGE/OPTIONS"
-        ); # this will exit the script here.
-    
-        exit 0; # should not be reached.
-    }
-
-    if ($option_verbosity)
-    {
-        $verbosity = $option_verbosity;
-    }
-
-    if ($option_fake)
-    {
-        $fake_mode = $option_fake;
-    }
-
-    if ($option_recursive)
-    {
-        $recursive = $option_recursive;
-    }
+      -exitval => 0,
+      -verbose => 99,
+      -sections => "NAME|SYNOPSIS|USAGE|USAGE/OPTIONS"
+    ); # this will exit the script here.
 }
 
 
@@ -217,9 +290,9 @@ sub ProcessFolder
                 (?<second>[0-9][0-9])
                 /x;
 
-            my $target = $dest . '/' . $+{year} . '/' . $+{month} . '/' . $+{day} . '/' . $file_name;
+            my $target = $target_path . '/' . $+{year} . '/' . $+{month} . '/' . $+{day} . '/' . $file_name;
             my $full_target = File::Spec->rel2abs($target);
-            my $target_path = $dest . '/' . $+{year} . '/' . $+{month} . '/' . $+{day} . '/';
+            my $target_path = $target_path . '/' . $+{year} . '/' . $+{month} . '/' . $+{day} . '/';
             my $full_target_path = File::Spec->rel2abs($target_path);
             mkpath($full_target_path) if !$fake_mode;
 
