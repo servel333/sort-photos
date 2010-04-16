@@ -72,6 +72,13 @@ untouched.
 Do everything except actually move or copy files.  In addition, no files are
 deleted.
 
+=item --no-rename
+
+Naming conflicts are reported but no files are copied or moved.
+
+By default, when a naming conflict occurs, a number is appended to the target
+path before the copy or move happens.
+
 =item --
 
 Stops processing command line options.  Further items are assumed to be
@@ -107,6 +114,8 @@ my $verbosity = 1;
 my $recursive = 0;
 
 my $fake_mode = 0;
+
+my $no_rename = 0;
 
 # 0: Perform copy operation
 # 1: Perform move operation
@@ -209,6 +218,10 @@ sub ParseOptions
             elsif ($arg_lc eq 'move')
             {
                 $move_mode++;
+            }
+            elsif ($arg_lc eq 'no-rename')
+            {
+                $no_rename++;
             }
             else
             {
@@ -337,67 +350,87 @@ sub ProcessFolder
 
             if (-e $full_target)
             {
-                my $identical = AreIdentical($pic_full, $full_target);
                 ClearConsoleLine() if ($verbosity);
-                print("'$target' exists.") if $verbosity;
-
-                #if ($move_mode)
+                my $identical = AreIdentical($pic_full, $full_target);
+                if ($identical)
+                {
+                    if ($move_mode)
+                    {
+                        unlink($pic_full) unless $fake_mode;
+                        print "'$target' duplicate removed" if $verbosity;
+                        print "[fake mode]" if $fake_mode;
+                        print("\n") if (1 < $verbosity);
+                        next;
+                    }
+                    else
+                    {
+                        print "'$target' [identical]" if $verbosity;
+                        print "[fake mode]" if $fake_mode;
+                        print("\n") if (1 < $verbosity);
+                        next;
+                    }
+                }
+                else
+                #elsif ($no_rename)
+                {
+                    print "'$target' [name conflict]" if $verbosity;
+                    print("\n") if (1 < $verbosity);
+                    $failed_count += 1;
+                    next;
+                }
+                #else
                 #{
-                #    if ($identical)
+                #    my $number = 1;
+                #    while (-e $full_target . $number)
                 #    {
-                #        
+                #        $number++;
                 #    }
-                #    else
-                #    {
-                #        
-                #    }
+                #
+                #    $full_target = $full_target . $number;
+                #    $target = $target . $number;
+                #
+                #    print "'$target' [renamed]" if $verbosity;
+                #    print("\n") if (1 < $verbosity);
                 #}
+            }
 
-                print(" (identical)") if $verbosity and $identical;
-                print(" (different)") if $verbosity and !$identical;
-                print("\n") if (1 < $verbosity);
-                $failed_count += 1;
+            ClearConsoleLine() if ($verbosity);
+
+            if ($fake_mode)
+            {
+                print("'$target' [fake mode]") if ($verbosity);
+                $successful_count += 1;
             }
             else
             {
-                ClearConsoleLine() if ($verbosity);
-
-                if ($fake_mode)
+                my $operation_success = 0;
+                if ($move_mode)
                 {
-                    print("'$target' [fake mode].") if ($verbosity);
+                    $operation_success = move($pic_full, $full_target);
+                }
+                else
+                {
+                    $operation_success = copy($pic_full, $full_target);
+                }
+
+                if ( $operation_success )
+                {
+                    print("'$target' $operation_pasttense") if ($verbosity);
                     $successful_count += 1;
                 }
                 else
                 {
-                    my $operation_success = 0;
-                    if ($move_mode)
-                    {
-                        $operation_success = move($pic_full, $full_target);
-                    }
-                    else
-                    {
-                        $operation_success = copy($pic_full, $full_target);
-                    }
-                    
-                    if ( $operation_success )
-                    {
-                        print("'$target' $operation_pasttense.") if ($verbosity);
-                        $successful_count += 1;
-                    }
-                    else
-                    {
-                        print "'$target' $operation failed: $!" if ($verbosity);
-                        $failed_count += 1;
-                    }
+                    print "'$target' $operation failed: $!" if ($verbosity);
+                    $failed_count += 1;
                 }
-
-                print("\n") if (1 < $verbosity);
             }
+
+            print("\n") if (1 < $verbosity);
         }
         else
         {
             ClearConsoleLine() if ($verbosity);
-            print("$pic_rel could not process file.") if ($verbosity);
+            print("$pic_rel could not process file") if ($verbosity);
             print("\n") if (1 < $verbosity);
             $failed_count += 1;
         }
