@@ -27,7 +27,6 @@ use Time::localtime;
 use Term::ReadKey;
 use File::Copy;
 use Image::ExifTool ':Public';
-use Digest::MD5;
 
 
 my ($VOLUME, $DIRECTORIES, $SCRIPT) = File::Spec->splitpath($0);
@@ -59,18 +58,9 @@ Show more output.
 
 Operate recursively (down directory tree).
 
-=item --move -m
-
-Instructs this script to use the move operation.  In addition, when duplicates
-are found they will be deleted.
-
-When omitted and by default, the copy operation is used and duplicates are left
-untouched.
-
 =item --fake
 
-Do everything except actually move or copy files.  In addition, no files are
-deleted.
+Do everything except actually move or copy files.
 
 =item --
 
@@ -108,16 +98,12 @@ my $recursive = 0;
 
 my $fake_mode = 0;
 
-# 0: Perform copy operation
-# 1: Perform move operation
-#    And duplicates are deleted
-my $move_mode = 0;
-
 my $operation = 'copy';
 my $operation_pasttense = 'copied';
 
 my @source_paths;
 my $target_path;
+
 
 =head1 DESCRIPTION
 
@@ -170,10 +156,6 @@ sub ParseOptions
                 {
                     $recursive++;
                 }
-                elsif ($char eq 'm') # move mode
-                {
-                    $move_mode++;
-                }
                 else
                 {
                     print STDERR "Invalid option -$char\n";
@@ -205,10 +187,6 @@ sub ParseOptions
             elsif ($arg_lc eq 'fake')
             {
                 $fake_mode++;
-            }
-            elsif ($arg_lc eq 'move')
-            {
-                $move_mode++;
             }
             else
             {
@@ -257,12 +235,6 @@ sub ParseOptions
     {
         exit;
     }
-
-    if ($move_mode)
-    {
-        $operation = 'move';
-        $operation_pasttense = 'moved';
-    }
 }
 
 
@@ -281,36 +253,35 @@ sub ProcessFolder
 {
     my $path = shift;
 
-    my $successful_count = 0;
-    my $failed_count = 0;
+    my ($successful_count, $failed_count) = 0;
 
     my @files = ListFiles($path);
     my $count = @files;
-    my @folders;
-
-    ClearConsoleLine() if ($verbosity);
-    print("$path : $count files\n") if (1 < $verbosity);
 
     if (!$count)
     {
         return;
     }
 
-    foreach my $pic_file (@files)
+    ClearConsoleLine() if ($verbosity);
+    print("$path : $count files\n") if (1 < $verbosity);
+
+    foreach my $file (@files)
     {
-        my $pic_rel = File::Spec->catfile($path, $pic_file);
-        my $pic_full = File::Spec->rel2abs($pic_rel);
+        my $base_filename = $path . '/' . $file;
+        my $full_path = File::Spec->rel2abs($base_filename);
+        my ($file_volume, $file_directories, $file_name) = File::Spec->splitpath($full_path);
 
         ClearConsoleLine() if ($verbosity);
-        print("$pic_file") if ($verbosity);
+        print("$file") if ($verbosity);
 
-        if (-d $pic_full)
+        if (-d $full_path)
         {
-            push(@folders, $pic_rel);
+            ProcessFolder($full_path) if $recursive;
             next;
         }
 
-        my $info = ImageInfo($pic_full);
+        my $info = ImageInfo($full_path);
         my $date = $info->{'CreateDate'};
 
         if ($date)
@@ -329,32 +300,16 @@ sub ProcessFolder
                 (?<second>[0-9][0-9])
                 /x;
 
-            my $pic_target_path = File::Spec->catfile($target_path, $+{year}, $+{month}, $+{day});
-            my $pic_target_full = File::Spec->rel2abs($pic_target_path);
-            mkpath($pic_target_full) if !$fake_mode;
-            my $target = File::Spec->catfile($pic_target_path, $pic_file);
+            my $target = $target_path . '/' . $+{year} . '/' . $+{month} . '/' . $+{day} . '/' . $file_name;
             my $full_target = File::Spec->rel2abs($target);
+            my $target_path = $target_path . '/' . $+{year} . '/' . $+{month} . '/' . $+{day} . '/';
+            my $full_target_path = File::Spec->rel2abs($target_path);
+            mkpath($full_target_path) if !$fake_mode;
 
             if (-e $full_target)
             {
-                my $identical = AreIdentical($pic_full, $full_target);
                 ClearConsoleLine() if ($verbosity);
-                print("'$target' exists.") if $verbosity;
-
-                #if ($move_mode)
-                #{
-                #    if ($identical)
-                #    {
-                #        
-                #    }
-                #    else
-                #    {
-                #        
-                #    }
-                #}
-
-                print(" (identical)") if $verbosity and $identical;
-                print(" (different)") if $verbosity and !$identical;
+                print("'$target' exists.") if ($verbosity);
                 print("\n") if (1 < $verbosity);
                 $failed_count += 1;
             }
@@ -364,43 +319,32 @@ sub ProcessFolder
 
                 if ($fake_mode)
                 {
-                    print("'$target' [fake mode].") if ($verbosity);
+                    print("'$target' $operation_pasttense [fake mode].") if ($verbosity);
+                    $successful_count += 1;
+                }
+                elsif ( copy($full_path, $full_target) )
+                {
+                    print("'$target' $operation_pasttense.") if ($verbosity);
                     $successful_count += 1;
                 }
                 else
                 {
-                    my $operation_success = 0;
-                    if ($move_mode)
-                    {
-                        $operation_success = move($pic_full, $full_target);
-                    }
-                    else
-                    {
-                        $operation_success = copy($pic_full, $full_target);
-                    }
-                    
-                    if ( $operation_success )
-                    {
-                        print("'$target' $operation_pasttense.") if ($verbosity);
-                        $successful_count += 1;
-                    }
-                    else
-                    {
-                        print "'$target' $operation failed: $!" if ($verbosity);
-                        $failed_count += 1;
-                    }
+                    print "'$target' $operation failed: $!" if ($verbosity);
+                    $failed_count += 1;
                 }
 
                 print("\n") if (1 < $verbosity);
+
             }
         }
         else
         {
             ClearConsoleLine() if ($verbosity);
-            print("$pic_rel could not process file.") if ($verbosity);
+            print("$base_filename could not process file.") if ($verbosity);
             print("\n") if (1 < $verbosity);
             $failed_count += 1;
         }
+
     }
 
     if ($verbosity)
@@ -408,32 +352,6 @@ sub ProcessFolder
         ClearConsoleLine();
         print("$path : $successful_count $operation_pasttense, $failed_count failed\n");
     }
-
-    while (@folders)
-    {
-        my $folder = pop(@folders);
-        ProcessFolder($folder) if $recursive;
-    }
-
-}
-
-
-sub GetChecksum
-{
-    my $file = shift;
-
-    open(FILE, $file) or die "Can't open '$file': $!";
-    binmode(FILE);
-    return Digest::MD5->new->addfile(*FILE)->hexdigest;
-}
-
-
-sub AreIdentical
-{
-    my $file1 = shift;
-    my $file2 = shift;
-
-    return (GetChecksum($file1) eq GetChecksum($file2));
 }
 
 
