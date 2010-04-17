@@ -5,7 +5,7 @@
 
 sort-photos - Sort photos from one directory into another.
 
-Version 1.0.0
+Version 1.1.0
 
 =head1 SYNOPSIS
 
@@ -74,15 +74,15 @@ deleted.
 
 =item --no-rename
 
-Naming conflicts are reported but no files are copied or moved.
+Name conflicts are reported but no files are copied or moved.
 
-By default, when a naming conflict occurs, a number is appended to the target
-path before the copy or move happens.
+By default, when a naming conflict occurs, a number is appended to the
+destination file name before the copy or move happens.
 
 =item --
 
 Stops processing command line options.  Further items are assumed to be
-files or directories.  The final argument is assumed to be the target
+files or directories.  The final argument is assumed to be the destination
 directory.
 
 =cut
@@ -99,6 +99,22 @@ directory.
 
 =back
 
+=head2 DEFINITIONS
+
+=over
+
+=item duplicate
+
+When a source file and destination file have the same file name, and the files
+are identical.
+
+=item name conflict
+
+When a source file and destination file have the same file name, and the files
+are not identical.
+
+=back
+
 =cut
 
 
@@ -106,20 +122,26 @@ my $DEBUG = 1;
 my $WARNINGS = 2;
 
 # Verbosity of output.
-#  0  Minimal
-#  1  Normal
-#  2  Verbose
+#  zero: Minimal or none
+#   one: Normal
+# other: Verbose
 my $verbosity = 1;
 
+#     zero: no recursive
+# non-zero: search into sub-directories
 my $recursive = 0;
 
+#     zero: real mode, move and copy files
+# non-zero: fake mode, no moves, copies or deletes
 my $fake_mode = 0;
 
+#     zero: rename file name conflicts
+# non-zero: 
 my $no_rename = 0;
 
-# 0: Perform copy operation
-# 1: Perform move operation
-#    And duplicates are deleted
+#     zero: Perform copy operation
+# non-zero: Perform move operation
+#           and duplicates are deleted
 my $move_mode = 0;
 
 my $operation = 'copy';
@@ -156,6 +178,7 @@ sub ParseOptions
         {
             last;
         }
+        # match -x, -xx... or -x-x... and trim initial dash
         elsif ($arg_lc =~ s/^-([^- ][^ ]*)$/$1/)
         {
             my @chars = split(//, $arg_lc);
@@ -191,6 +214,7 @@ sub ParseOptions
             }
 
         }
+        # match --x... but not ---x... and remove initial two dashes.
         elsif ($arg_lc =~ s/^--([^- ][^ ]+)$/$1/)
         {
             if ($arg_lc eq 'help')
@@ -230,6 +254,10 @@ sub ParseOptions
             }
 
         }
+        ## match 3 or more dashes followed by any non-space characters
+        #elsif ($arg_lc =~ s/^---([^ ]+)$/$1/)
+        #{
+        #}
         else
         {
             push(@source_paths, $arg)
@@ -292,38 +320,38 @@ sub ShowUsage
 
 sub ProcessFolder
 {
-    my $path = shift;
+    my $folder = shift;
 
     my $successful_count = 0;
     my $failed_count = 0;
 
-    my @files = ListFiles($path);
+    my @files = ListFiles($folder);
     my $count = @files;
     my @folders;
 
     ClearConsoleLine() if ($verbosity);
-    print("$path : $count files\n") if (1 < $verbosity);
+    print("$folder : $count files\n") if (1 < $verbosity);
 
     if (!$count)
     {
         return;
     }
 
-    foreach my $pic_file (@files)
+    foreach my $source_file (@files)
     {
-        my $pic_rel = File::Spec->catfile($path, $pic_file);
-        my $pic_full = File::Spec->rel2abs($pic_rel);
+        my $source_rel = File::Spec->catfile($folder, $source_file);
+        my $source_full = File::Spec->rel2abs($source_rel);
 
         ClearConsoleLine() if ($verbosity);
-        print("$pic_file") if ($verbosity);
+        print("$source_file") if ($verbosity);
 
-        if (-d $pic_full)
+        if (-d $source_full)
         {
-            push(@folders, $pic_rel);
+            push(@folders, $source_rel);
             next;
         }
 
-        my $info = ImageInfo($pic_full);
+        my $info = ImageInfo($source_full);
         my $date = $info->{'CreateDate'};
 
         if ($date)
@@ -342,63 +370,84 @@ sub ProcessFolder
                 (?<second>[0-9][0-9])
                 /x;
 
-            my $pic_target_path = File::Spec->catfile($target_path, $+{year}, $+{month}, $+{day});
-            my $pic_target_full = File::Spec->rel2abs($pic_target_path);
-            mkpath($pic_target_full) if !$fake_mode;
-            my $target = File::Spec->catfile($pic_target_path, $pic_file);
-            my $full_target = File::Spec->rel2abs($target);
+            my $destination_path = File::Spec->catfile($target_path, $+{year}, $+{month}, $+{day});
+            my $destination_path_full = File::Spec->rel2abs($destination_path);
+            my $destination_rel = File::Spec->catfile($destination_path, $source_file);
+            my $destination_full = File::Spec->rel2abs($destination_rel);
 
-            if (-e $full_target)
+            mkpath($destination_path_full) if !$fake_mode;
+
+            if (-e $destination_full)
             {
                 ClearConsoleLine() if ($verbosity);
-                my $identical = AreIdentical($pic_full, $full_target);
+                my $identical = AreIdentical($source_full, $destination_full);
                 if ($identical)
                 {
                     if ($move_mode)
                     {
-                        unlink($pic_full) unless $fake_mode;
-                        print "'$target' duplicate removed" if $verbosity;
-                        print "[fake mode]" if $fake_mode;
+                        unlink($source_full) unless $fake_mode;
+                        print "'$destination_rel' NOTICE: duplicate removed" if $verbosity;
+                        print " fake" if $fake_mode;
                         print("\n") if (1 < $verbosity);
                         next;
                     }
                     else
                     {
-                        print "'$target' [identical]" if $verbosity;
-                        print "[fake mode]" if $fake_mode;
+                        print "'$destination_rel' NOTICE: duplicate file" if $verbosity;
                         print("\n") if (1 < $verbosity);
                         next;
                     }
                 }
-                else
-                #elsif ($no_rename)
+                elsif ($no_rename)
                 {
-                    print "'$target' [name conflict]" if $verbosity;
+                    print "'$destination_rel' ERROR: name conflict" if $verbosity;
                     print("\n") if (1 < $verbosity);
                     $failed_count += 1;
                     next;
                 }
-                #else
-                #{
-                #    my $number = 1;
-                #    while (-e $full_target . $number)
-                #    {
-                #        $number++;
-                #    }
-                #
-                #    $full_target = $full_target . $number;
-                #    $target = $target . $number;
-                #
-                #    print "'$target' [renamed]" if $verbosity;
-                #    print("\n") if (1 < $verbosity);
-                #}
+                else
+                {
+                    my $source_file_mod = $source_file;
+                    $source_file_mod =~ /
+                        ^
+                        (?<file>.*)
+                        [.]
+                        (?<ext>jpg|jpeg|tif|tiff)
+                        $
+                        /x;
+
+                    if ($+{file} and $+{ext})
+                    {
+                        print "'$destination_rel'" if $verbosity;
+
+                        my $number = 1;
+                        my $new_file = $+{file} . '-' . $number . '.' . $+{ext};
+                        while (-e File::Spec->catfile($destination_path, $new_file))
+                        {
+                            $number++;
+                            $new_file = $+{file} . '-' . $number . '.' . $+{ext}
+                        }
+
+                        $destination_rel = File::Spec->catfile($destination_path, $new_file);
+                        $destination_full = File::Spec->rel2abs($destination_rel);
+
+                        print " NOTICE: renamed to '$new_file'" if $verbosity;
+                        print("\n") if (1 < $verbosity);
+                    }
+                    else
+                    {
+                        print "'$destination_rel' ERROR: failed to parse file name " if $verbosity;
+                        $failed_count += 1;
+                        next;
+                    }
+                }
             }
 
             ClearConsoleLine() if ($verbosity);
 
             if ($fake_mode)
             {
-                print("'$target' [fake mode]") if ($verbosity);
+                print("'$destination_rel' [fake]") if ($verbosity);
                 $successful_count += 1;
             }
             else
@@ -406,21 +455,21 @@ sub ProcessFolder
                 my $operation_success = 0;
                 if ($move_mode)
                 {
-                    $operation_success = move($pic_full, $full_target);
+                    $operation_success = move($source_full, $destination_full);
                 }
                 else
                 {
-                    $operation_success = copy($pic_full, $full_target);
+                    $operation_success = copy($source_full, $destination_full);
                 }
 
                 if ( $operation_success )
                 {
-                    print("'$target' $operation_pasttense") if ($verbosity);
+                    print("'$destination_rel' $operation_pasttense") if ($verbosity);
                     $successful_count += 1;
                 }
                 else
                 {
-                    print "'$target' $operation failed: $!" if ($verbosity);
+                    print "'$destination_rel' ERROR: $operation failed: $!" if ($verbosity);
                     $failed_count += 1;
                 }
             }
@@ -430,7 +479,7 @@ sub ProcessFolder
         else
         {
             ClearConsoleLine() if ($verbosity);
-            print("$pic_rel could not process file") if ($verbosity);
+            print("'$source_rel' ERROR: failed to process file") if ($verbosity);
             print("\n") if (1 < $verbosity);
             $failed_count += 1;
         }
@@ -439,7 +488,7 @@ sub ProcessFolder
     if ($verbosity)
     {
         ClearConsoleLine();
-        print("$path : $successful_count $operation_pasttense, $failed_count failed\n");
+        print("$folder : $successful_count $operation_pasttense, $failed_count failed\n");
     }
 
     while (@folders)
