@@ -43,7 +43,9 @@ Arguments starting with - are assumed to be single letter arguments.  Specifying
 
 =over 8
 
-=item --help -h
+=item -h
+
+=item --help
 
 Print a help message and exits.
 
@@ -51,15 +53,23 @@ Print a help message and exits.
 
 Print a brief message and exits.
 
-=item --verbose -v
+=item -v
+
+=item --verbose
 
 Show more output.
 
-=item --recursive -r -R
+=item -R
+
+=item -r
+
+=item --recursive
 
 Operate recursively (down directory tree).
 
-=item --move -m
+=item -m
+
+=item --move
 
 Instructs this script to use the move operation.  In addition, when duplicates
 are found they will be deleted.
@@ -79,29 +89,30 @@ Name conflicts are reported but no files are copied or moved.
 By default, when a naming conflict occurs, a number is appended to the
 destination file name before the copy or move happens.
 
+=item --sort-unsupported
+
+Sorts unsupported files (see below) into the root of the target folder.
+
+=item --sort-unsupported-into <folder>
+
+Sorts unsupported files (see below) into <folder>.
+
 =item --
 
 Stops processing command line options.  Further items are assumed to be
 files or directories.  The final argument is assumed to be the destination
 directory.
 
-=cut
-
-#=item -s --sort
-#
-#Specifies how to sort the images.  This may be specified multiple times for
-#sub-sorting.
-#
-#  sort option
-#  ------------------------------
-#  --sort image <image-property>
-#  --sort file <file-property>
-
 =back
 
 =head2 DEFINITIONS
 
-=over
+=over 8
+
+=item unsupported file
+
+When a source file has no EXIF metadata, an invalid date taken or is not an
+image file.
 
 =item duplicate
 
@@ -143,6 +154,9 @@ my $no_rename = 0;
 # non-zero: Perform move operation
 #           and duplicates are deleted
 my $move_mode = 0;
+
+my $unsupported_sort = 0;
+my $unsupported_target;
 
 my $operation = 'copy';
 my $operation_pasttense = 'copied';
@@ -247,6 +261,25 @@ sub ParseOptions
             {
                 $no_rename++;
             }
+            elsif ($arg_lc eq 'sort-unsupported')
+            {
+                $unsupported_sort++;
+            }
+            elsif ($arg_lc eq 'sort-unsupported-into')
+            {
+                $unsupported_sort++;
+
+                my $folder = shift(@ARGV);
+                if ($folder)
+                {
+                    $unsupported_target = $folder;
+                }
+                else
+                {
+                    print STDERR "ERROR: expected <folder> after '$arg'\n";
+                    exit;
+                }
+            }
             else
             {
                 print STDERR "Invalid option $arg\n";
@@ -326,6 +359,7 @@ sub ProcessFolder
     my $failed_count = 0;
 
     my @files = ListFiles($folder);
+    @files = sort(@files);
     my $count = @files;
     my @folders;
 
@@ -340,19 +374,19 @@ sub ProcessFolder
     foreach my $source_file (@files)
     {
         my $source_rel = File::Spec->catfile($folder, $source_file);
-        my $source_full = File::Spec->rel2abs($source_rel);
 
         ClearConsoleLine() if ($verbosity);
         print("$source_file") if ($verbosity);
 
-        if (-d $source_full)
+        if (-d $source_rel)
         {
             push(@folders, $source_rel);
             next;
         }
 
-        my $info = ImageInfo($source_full);
+        my $info = ImageInfo($source_rel);
         my $date = $info->{'CreateDate'};
+        my ($year, $month, $day);
 
         if ($date)
         {
@@ -370,22 +404,31 @@ sub ProcessFolder
                 (?<second>[0-9][0-9])
                 /x;
 
+            $year  = $+{year};
+            $month = $+{month};
+            $day   = $+{day};
+
+        }
+
+        if (
+          $year and (0 < $year) and
+          $month and (0 < $month) and
+          $day and (0 < $day))
+        {
             my $destination_path = File::Spec->catfile($target_path, $+{year}, $+{month}, $+{day});
-            my $destination_path_full = File::Spec->rel2abs($destination_path);
             my $destination_rel = File::Spec->catfile($destination_path, $source_file);
-            my $destination_full = File::Spec->rel2abs($destination_rel);
 
-            mkpath($destination_path_full) if !$fake_mode;
+            mkpath($destination_path) if !$fake_mode;
 
-            if (-e $destination_full)
+            if (-e $destination_rel)
             {
                 ClearConsoleLine() if ($verbosity);
-                my $identical = AreIdentical($source_full, $destination_full);
+                my $identical = AreIdentical($source_rel, $destination_rel);
                 if ($identical)
                 {
                     if ($move_mode)
                     {
-                        unlink($source_full) unless $fake_mode;
+                        unlink($source_rel) unless $fake_mode;
                         print "'$destination_rel' NOTICE: duplicate removed" if $verbosity;
                         print " fake" if $fake_mode;
                         print("\n") if (1 < $verbosity);
@@ -407,36 +450,9 @@ sub ProcessFolder
                 }
                 else
                 {
-                    my $source_file_mod = $source_file;
-                    $source_file_mod =~ /
-                        ^
-                        (?<file>.*)
-                        [.]
-                        (?<ext>jpg|jpeg|tif|tiff)
-                        $
-                        /x;
-
-                    if ($+{file} and $+{ext})
+                    $destination_rel = RenameFile($destination_path, $source_file);
+                    if (!$destination_rel)
                     {
-                        print "'$destination_rel'" if $verbosity;
-
-                        my $number = 1;
-                        my $new_file = $+{file} . '-' . $number . '.' . $+{ext};
-                        while (-e File::Spec->catfile($destination_path, $new_file))
-                        {
-                            $number++;
-                            $new_file = $+{file} . '-' . $number . '.' . $+{ext}
-                        }
-
-                        $destination_rel = File::Spec->catfile($destination_path, $new_file);
-                        $destination_full = File::Spec->rel2abs($destination_rel);
-
-                        print " NOTICE: renamed to '$new_file'" if $verbosity;
-                        print("\n") if (1 < $verbosity);
-                    }
-                    else
-                    {
-                        print "'$destination_rel' ERROR: failed to parse file name " if $verbosity;
                         $failed_count += 1;
                         next;
                     }
@@ -455,11 +471,11 @@ sub ProcessFolder
                 my $operation_success = 0;
                 if ($move_mode)
                 {
-                    $operation_success = move($source_full, $destination_full);
+                    $operation_success = move($source_rel, $destination_rel);
                 }
                 else
                 {
-                    $operation_success = copy($source_full, $destination_full);
+                    $operation_success = copy($source_rel, $destination_rel);
                 }
 
                 if ( $operation_success )
@@ -476,10 +492,28 @@ sub ProcessFolder
 
             print("\n") if (1 < $verbosity);
         }
+        if (0 or $unsupported_sort)
+        {
+            my $destination_path;
+
+            if ($unsupported_target)
+            {
+                $destination_path = File::Spec->catfile($target_path, $unsupported_target);
+            }
+            else
+            {
+                $destination_path = $target_path;
+            }
+
+            my $destination_rel = File::Spec->catfile($destination_path, $source_file);
+
+            mkpath($destination_path) if !$fake_mode;
+
+        }
         else
         {
             ClearConsoleLine() if ($verbosity);
-            print("'$source_rel' ERROR: failed to process file") if ($verbosity);
+            print("'$source_rel' ERROR: unsupported file") if ($verbosity);
             print("\n") if (1 < $verbosity);
             $failed_count += 1;
         }
@@ -497,6 +531,53 @@ sub ProcessFolder
         ProcessFolder($folder) if $recursive;
     }
 
+}
+
+
+sub RenameFile
+{
+    my $destination_path = shift;
+    my $source_file = shift;
+
+    my $destination_rel;
+    my $destination_full;
+
+    my $source_file_mod = $source_file;
+    $source_file_mod =~ /
+        ^
+        (?<file>.*)
+        [.]
+        (?<ext>jpg|jpeg|tif|tiff)
+        $
+        /x;
+
+    my $file = $+{file};
+    my $ext = $+{ext};
+
+    if ($file and $ext)
+    {
+        print "'$destination_rel'" if $verbosity;
+
+        my $number = 1;
+        my $new_file = $file . '-' . $number . '.' . $ext;
+        while (-e File::Spec->catfile($destination_path, $new_file))
+        {
+            $number++;
+            $new_file = $file . '-' . $number . '.' . $ext;
+        }
+
+        $destination_rel = File::Spec->catfile($destination_path, $new_file);
+        $destination_full = File::Spec->rel2abs($destination_rel);
+
+        print " NOTICE: renamed to '$new_file'" if $verbosity;
+        print("\n") if (1 < $verbosity);
+    }
+    else
+    {
+        print "'$destination_rel' ERROR: failed to parse file name " if $verbosity;
+    }
+
+    return $destination_rel;
 }
 
 
