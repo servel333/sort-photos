@@ -5,7 +5,7 @@
 
 sort-photos - Sort photos from one directory into another.
 
-Version 1.1.0
+Version 1.2.0
 
 =head1 SYNOPSIS
 
@@ -385,7 +385,11 @@ sub ProcessFolder
         }
 
         my $info = ImageInfo($source_rel);
-        my $date = $info->{'CreateDate'};
+        my $date = $info->{'DateTimeOriginal'};
+        if(!$date  || $date eq ''){
+            # fallback to CreateDate
+            $date = $info->{'CreateDate'};
+        }
         my ($year, $month, $day);
 
         if ($date)
@@ -492,6 +496,7 @@ sub ProcessFolder
 
             print("\n") if (1 < $verbosity);
         }
+
         if (0 or $unsupported_sort)
         {
             my $destination_path;
@@ -776,9 +781,13 @@ __END__
 
 Nathan Perry [nateperry333 at gmail dot com]
 
+=head1 CONTRIBUTORS
+
+Maarten Stolte
+
 =head1 COPYRIGHT and LICENSE
 
-Copyright 2010 Nathan Perry.
+Copyright (C) 2010-2013 Nathan Perry.
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
