@@ -1,6 +1,22 @@
 # sort-photos
 Automatically exported from code.google.com/p/sort-photos
 
+## About
+
+Intended to take one or more input directories or files and copy or move found image files into directories under a specified target directory.
+
+Intended to detect duplicate images (by checksum)
+
+Intended to detect multiple images with the same date taken and the same file name and manage the files.
+
+* Rename file by adding a character (number, letter)
+* Rename file based on the folder it's in.
+
+## Requirements
+
+* [PERL](http://www.perl.org/)
+* Image::ExifTool PERL module
+
 ## Use
 
 PERL script to sort photos into folders by date taken (EXIF property 'DateTimeOriginal' or 'CreateDate').
